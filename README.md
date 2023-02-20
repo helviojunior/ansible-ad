@@ -1,8 +1,10 @@
-# How to build a Windows VM from scratch with Ansible
+# Creating a new Active Directory Forest with Ansible
 
-* [x] Vmware ESXi
-* [x] vSphere
-* [x] vCenter
+* [x] Active Directory Forest
+* [x] Users
+* [x] Groups
+* [x] OUs
+* [x] SPNs
 
 ## Installing
 
@@ -14,8 +16,7 @@ ansible-galaxy collection install community.windows
 ## Executing
 
 ```bash
-ip="10.10.10.10"; # Vmware server IP
-ansible-playbook -i $ip, deploy_windows.yaml
+ansible-playbook -i localhost, deploy_ad.yaml
 ```
 
 ## Common error
@@ -31,5 +32,4 @@ export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 ```
 
 ## Inspiration
-- [How to build a Windows VM from scratch with Ansible](https://madlabber.wordpress.com/2019/06/23/how-to-build-a-windows-vm-from-scratch-with-ansible/comment-page-1)
-- [Using autounattend.xml to enable Ansible support in Windows](https://madlabber.wordpress.com/2019/06/19/using-autounattend-xml-to-enable-ansible-support-in-windows/)
+- [Creating a new Active Directory Forest with Ansible](https://madlabber.wordpress.com/2019/09/08/creating-a-new-active-directory-forest-with-ansible/)
