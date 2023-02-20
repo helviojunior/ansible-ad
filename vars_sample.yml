@@ -12,6 +12,7 @@ dc_netmask_cidr: 24
 dc_gateway: 172.16.108.2
 
 # Domain controller data
+company_name: 'sec4us'
 dc_hostname: 'dc01'
 domain_name: 'demo.lab'
 recovery_password: 'P@ssw0rd'
