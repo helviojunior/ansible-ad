@@ -1,0 +1,20 @@
+# VM data
+vm_name: testvm
+ansible_user: Administrator
+ansible_password: "P@ssw0rd"
+
+# Actual temporary IP address
+temp_address: 172.16.108.144
+
+# Domain controller network data
+dc_address: 172.16.108.11
+dc_netmask_cidr: 24
+dc_gateway: 172.16.108.2
+
+# Domain controller data
+dc_hostname: 'dc01'
+domain_name: 'demo.lab'
+recovery_password: 'P@ssw0rd'
+upstream_dns_1: 8.8.8.8
+upstream_dns_2: 8.8.4.4
+ntp_servers: "0.us.pool.ntp.org,1.us.pool.ntp.org"

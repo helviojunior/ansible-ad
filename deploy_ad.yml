@@ -1,0 +1,236 @@
+---
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - vars.yml
+
+  vars:
+    ansible_python_interpreter: "/usr/bin/python3"
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_winrm_port: 5986
+
+  tasks:
+
+  - name: Base | Installing knowsmore python lib
+    ansible.builtin.pip:
+      name:
+        - knowsmore
+    delegate_to: localhost
+
+  - name: Add new PDC to Ansible Hosts
+    add_host:
+      name: '{{ dc_address }}'
+        ansible_connection: winrm
+        ansible_winrm_transport: ntlm
+        ansible_winrm_server_cert_validation: ignore
+        ansible_winrm_port: 5986
+        domain_password: '{{ ansible_password }}'
+        domain_username: '{{ ansible_user }}'
+        domain_server: '{{ dc_address }}'
+        group: "ad"
+      
+  - name: Wait for system to become reachable over WinRM
+    wait_for_connection:
+      timeout: 900
+    delegate_to: '{{ temp_address }}'
+
+  - name: Set static IP address
+    win_shell: "(new-netipaddress -InterfaceAlias Ethernet0 -IPAddress {{ dc_address }} -prefixlength {{dc_netmask_cidr}} -defaultgateway {{ dc_gateway }})"
+    delegate_to: '{{ temp_address }}'  
+    ignore_errors: True 
+
+- hosts: "ad"
+  gather_facts: true
+  vars_files:
+    - vars.yml
+
+  vars:
+    ansible_python_interpreter: "/usr/bin/python3"
+    reverse_dns_zone: "{{ ((dc_address|string) + '/' + (dc_netmask_cidr|string)) | ansible.utils.ipaddr('network/prefix') }}"
+
+  tasks:
+
+  - name: Wait for system to become reachable over new ip
+    wait_for_connection:
+      timeout: 900
+
+  - name: Set Password
+    win_user:
+      name: '{{ ansible_user }}'
+      password: "{{ ansible_password }}"
+      state: present
+    ignore_errors: True  
+
+  - name: Set upstream DNS server 
+    win_dns_client:
+      adapter_names: '*'
+      ipv4_addresses:
+      - '{{ upstream_dns_1 }}'
+      - '{{ upstream_dns_2 }}'
+
+  - name: Stop the time service
+    win_service:
+      name: w32time
+      state: stopped
+  
+  - name: Set NTP Servers
+    win_shell: 'w32tm /config /syncfromflags:manual /manualpeerlist:"{{ntp_servers}}"'
+  
+  - name: Start the time service
+    win_service:
+      name: w32time
+      state: started  
+
+  - name: Change the hostname 
+    win_hostname:
+      name: '{{ dc_hostname }}'
+    register: res
+  
+  - name: Reboot
+    win_reboot:
+    when: res.reboot_required   
+
+  - name: Install Active Directory
+    win_feature: >
+         name=AD-Domain-Services
+         include_management_tools=yes
+         include_sub_features=yes
+         state=present
+    register: result
+  
+  - name: Create Domain
+    win_domain: >
+       dns_domain_name='{{ domain_name }}'
+       safe_mode_password='{{ recovery_password }}'
+    register: ad
+  
+  - name: Disable firewall for Domain, Public and Private profiles
+    win_firewall:
+      state: disabled
+      profiles:
+      - Domain
+      - Private
+      - Public
+    tags: disable_firewall
+
+  - name: reboot server
+    win_reboot:
+     msg: "Installing AD. Rebooting..."
+     pre_reboot_delay: 15
+    when: ad.changed
+
+  - name: Set internal DNS server 
+    win_dns_client:
+      adapter_names: '*'
+      ipv4_addresses:
+      - '127.0.0.1'
+
+  - name: Create reverse DNS zone
+    win_shell: "Add-DnsServerPrimaryZone -NetworkID {{reverse_dns_zone}} -ReplicationScope Forest"
+ 
+    retries: 30
+    delay: 60
+    register: result           
+    until: result is succeeded
+
+  - name: Check for xRemoteDesktopAdmin Powershell module
+    win_psmodule:
+      name: xRemoteDesktopAdmin
+      state: present
+      accept_license: true
+
+  - name: Enable Remote Desktop
+    win_dsc:
+      resource_name: xRemoteDesktopAdmin
+      Ensure: present
+      UserAuthentication: NonSecure
+
+
+  - name: Set the maximum password age
+    community.windows.win_security_policy:
+      section: System Access
+      key: MaximumPasswordAge
+      value: 365
+
+  - name: Set the minimum password length
+    community.windows.win_security_policy:
+      section: System Access
+      key: MinimumPasswordLength
+      value: 4
+
+  - name: Set the password complexity
+    community.windows.win_security_policy:
+      section: System Access
+      key: PasswordComplexity
+      value: 0
+
+  - name: Create object structure
+    populate_ad:
+      user: 5000
+      group: 300
+      ou: 200
+      domain_admins: 20
+      spn: 50
+      company_name: '{{ company_name }}'
+    connection: local
+    register: ad_new_objects
+    delegate_to: local_action
+
+  - name: Ensure OU is groups
+    community.windows.win_domain_ou:
+      name: 'groups'
+      state: present
+    register: groups_ou
+
+  - name: Get root DN
+    set_fact:
+      root_dn: "{{ groups_ou['path'] }}"
+
+  - name: Get OU groups DN
+    set_fact:
+      groups_dn: "{{ groups_ou['ou']['DistinguishedName'] }}"
+
+  - name: Ensure OU
+    community.windows.win_domain_ou:
+      name: 'OUs'
+      state: present
+    register: base_ou
+
+  - name: Get OU base DN
+    set_fact:
+      ou_base_dn: "{{ base_ou['ou']['DistinguishedName'] }}"
+
+  - name: Create/update all OUs
+    community.windows.win_domain_ou:
+      name: '{{ item }}'
+      path: '{{ ou_base_dn }}'
+      state: present
+    loop: "{{ ad_new_objects['data']['ou'] | list }}"
+
+  - name: Create/update all groups
+    community.windows.win_domain_group:
+      scope: global
+      name: '{{ item }}'
+      path: '{{ groups_dn }}'
+      state: present
+    loop: "{{ ad_new_objects['data']['group'] | list }}"
+
+  - name: Create Users
+    community.windows.win_domain_user:
+      name: '{{ item.name }}'
+      password: '{{ item.passwd }}'
+      state: present
+      path: '{{ "OU=" + item.ou + "," + ou_base_dn }}'
+      groups: '{{ item.member_of | list }}'
+      password_never_expires: true
+    loop: "{{ ad_new_objects['data']['user'] | list }}"
+
+
+  - name: Update Users SPN
+    community.windows.win_domain_user:
+      name: '{{ item.name }}'
+      spn: '{{ item.spn }}'
+    loop: "{{ ad_new_objects['data']['spn'] | list }}"
+
