@@ -6,10 +6,8 @@
 
   vars:
     ansible_python_interpreter: "/usr/bin/python3"
-    ansible_connection: winrm
-    ansible_winrm_transport: ntlm
-    ansible_winrm_server_cert_validation: ignore
-    ansible_winrm_port: 5986
+    connection: local
+    ansible_connection: local
 
   tasks:
 
@@ -22,15 +20,27 @@
   - name: Add new PDC to Ansible Hosts
     add_host:
       name: '{{ dc_address }}'
-        ansible_connection: winrm
-        ansible_winrm_transport: ntlm
-        ansible_winrm_server_cert_validation: ignore
-        ansible_winrm_port: 5986
-        domain_password: '{{ ansible_password }}'
-        domain_username: '{{ ansible_user }}'
-        domain_server: '{{ dc_address }}'
-        group: "ad"
-      
+      ansible_connection: winrm
+      ansible_winrm_transport: ntlm
+      ansible_winrm_server_cert_validation: ignore
+      ansible_winrm_port: 5986
+      domain_password: '{{ ansible_password }}'
+      domain_username: '{{ ansible_user }}'
+      domain_server: '{{ dc_address }}'
+      group: "ad"
+
+  - name: Add new PDC to Ansible Hosts
+    add_host:
+      name: '{{ temp_address }}'
+      ansible_connection: winrm
+      ansible_winrm_transport: ntlm
+      ansible_winrm_server_cert_validation: ignore
+      ansible_winrm_port: 5986
+      domain_password: '{{ ansible_password }}'
+      domain_username: '{{ ansible_user }}'
+      domain_server: '{{ dc_address }}'
+      group: "ad"
+
   - name: Wait for system to become reachable over WinRM
     wait_for_connection:
       timeout: 900
