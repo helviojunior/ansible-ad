@@ -186,9 +186,9 @@ class AdHelper():
         if name:
 
             wlc = WordList()
-            wlc.small = True
+            wlc.small = False
             wlc.name = name
-            wlc.max_size = len(name) + 5
+            wlc.max_size = len(wlc.name) + 5
             wlc.min_size = 5
             wlc.setup()
             estimated_size = wlc.calculate()
@@ -203,9 +203,9 @@ class AdHelper():
                          f"data {Tools.sizeof_fmt(estimated_size, start_unit='K')}."
                                            f"The maximum is {Tools.sizeof_fmt(max, start_unit='K')}"))
 
-            self.wl = [w for w in wlc.generate(name, 0)]
-            self.wl.append(name.lower())
-            self.wl.append(name.upper())
+            self.wl = [w for w in wlc.generate(wlc.name, 0)]
+            self.wl.append(wlc.name.lower())
+            self.wl.append(wlc.name.upper())
 
         self.groups = [self.get_name(prefix='G') for _ in range(self.module.params.get('group', 1))]
         self.ous = [self.get_name(prefix='OU') for _ in range(self.module.params.get('ou', 1))]

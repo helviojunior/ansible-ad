@@ -230,6 +230,9 @@
       state: present
     register: computers_ou
     ignore_errors: true
+    retries: 5
+    delay: 10
+    until: computers_ou['path'] is defined and computers_ou['path'][0] is defined and computers_ou['path'][0] != ''
 
   - name: Get root DN
     set_fact:
@@ -243,7 +246,10 @@
       name: 'groups'
       path: '{{ root_dn }}'
       state: present
+    retries: 5
+    delay: 10
     register: groups_ou
+    until: groups_ou['ou'] is defined and groups_ou['ou']['DistinguishedName'] is defined and groups_ou['ou']['DistinguishedName'] != ''
 
   - name: Get OU groups DN
     set_fact:
@@ -256,6 +262,9 @@
       path: '{{ root_dn }}'
       state: present
     register: base_ou
+    retries: 5
+    delay: 10
+    until: base_ou['ou'] is defined and base_ou['ou']['DistinguishedName'] is defined and base_ou['ou']['DistinguishedName'] != ''
 
   - name: Get OU base DN
     set_fact:
