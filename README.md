@@ -19,6 +19,14 @@ ansible-galaxy collection install community.windows
 ansible-playbook -i localhost, deploy_ad.yaml
 ```
 
+### Populate AD
+
+If you want populate your brand new AD with random data, execute the command bellow
+
+```bash
+ansible-playbook -i localhost, deploy_ad_data.yaml
+```
+
 ## Deploy Windows Machine from scratch
 
 - [How to build a Windows VM from scratch with Ansible](https://github.com/helviojunior/ansible-vmware-windows)
