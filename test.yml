@@ -1,0 +1,60 @@
+---
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - vars.yml
+
+  vars:
+    ansible_python_interpreter: "/usr/bin/python3"
+
+  tasks:
+
+  - name: Add new PDC to Ansible Hosts
+    add_host:
+      name: '{{ dc_address }}'
+      ansible_connection: winrm
+      ansible_winrm_transport: ntlm
+      ansible_winrm_server_cert_validation: ignore
+      ansible_winrm_port: 5986
+      group: "ad"
+
+- hosts: "ad"
+  gather_facts: false
+  vars_files:
+    - vars.yml
+
+  vars:
+    ansible_python_interpreter: "/usr/bin/python3"
+    reverse_dns_zone: "{{ ((dc_address|string) + '/' + (dc_netmask_cidr|string)) | ansible.utils.ipaddr('network/prefix') }}"
+    dc_creds: &dc_creds
+      domain_password: '{{ ansible_password }}'
+      domain_username: '{{ ansible_user }}'
+      domain_server: '{{ dc_address }}'
+
+  tasks:
+
+  - name: Get default OU 'computers'
+    community.windows.win_domain_ou:
+      <<: *dc_creds
+      name: 'computers'
+      state: present
+    register: computers_ou
+    ignore_errors: true
+
+  - name: Get root DN
+    set_fact:
+      root_dn: "{{ computers_ou['path'][0] | string }}"
+
+  - debug: msg="{{ root_dn }}"
+
+  - name: Create/update OU 'groups'
+    community.windows.win_domain_ou:
+      <<: *dc_creds
+      name: 'groups'
+      path: '{{ root_dn }}'
+      state: present
+    retries: 5
+    delay: 10
+    register: groups_ou
+    until: groups_ou['ou'] is defined and groups_ou['ou']['DistinguishedName'] is defined and groups_ou['ou']['DistinguishedName'] != ''
+

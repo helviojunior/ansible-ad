@@ -23,12 +23,6 @@
       ansible_winrm_server_cert_validation: ignore
       ansible_winrm_port: 5986
 
-  - name: Base | Installing knowsmore python lib
-    ansible.builtin.pip:
-      name:
-        - knowsmore
-    delegate_to: localhost
-
   - name: Add new PDC to Ansible Hosts
     add_host:
       name: '{{ dc_address }}'

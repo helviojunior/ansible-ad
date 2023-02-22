@@ -2,7 +2,6 @@
 
 # Copyright: (c) 2018, Terry Jones <terry.jones@example.org>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-# Based on https://github.com/dericcrago/ansible/blob/6d6dea0881fe79e7b6c605a916266139dc4d15d7/lib/ansible/modules/cloud/vmware/vmware_guest.py
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
@@ -10,7 +9,7 @@ import time
 
 DOCUMENTATION = r'''
 ---
-module: populate_ad
+module: generate_ad_data
 short_description: Manages virtual machines in vCenter
 description:
 - Create new floppy disk.
@@ -142,7 +141,7 @@ class AdHelper():
 
     _USER = string.ascii_uppercase + string.digits
     _PASS_SIMPLE = string.ascii_lowercase + string.ascii_uppercase + string.digits
-    _PASS_COMPLEX = _PASS_SIMPLE + string.punctuation
+    _PASS_COMPLEX = (_PASS_SIMPLE + string.punctuation).replace("'", "").replace("\"", "").replace("\\", "")
 
     def __init__(self, module):
         self.module = module
@@ -168,19 +167,18 @@ class AdHelper():
 
         return dict(
             name=name,
-            member_of=groups + [random.choice(self.groups)],
-            ou=random.choice(self.ous),
+            member_of=[g['name'] for g in (groups + [random.choice(self.groups)])],
+            path=(lambda a: f"OU={a['name']},{a['path']}")(random.choice(self.ous)),
             passwd=passwd
         )
 
-    def get_spn(self, username):
-        return dict(
-            name=username,
-            spn=f"MSSQLSvc/fakespn.{username.lower()}.local:1433"
-        )
+    def get_spn(self, username) -> str:
+        return f"MSSQLSvc/fakespn.{username.lower()}.local:1433"
 
     def calculate(self):
         result = {'failed': False, 'changed': False}
+
+        base_dn = self.module.params.get('base_dn', '').strip(' ,')
 
         name = self.module.params.get('company_name', None)
         if name:
@@ -207,28 +205,53 @@ class AdHelper():
             self.wl.append(wlc.name.lower())
             self.wl.append(wlc.name.upper())
 
-        self.groups = [self.get_name(prefix='G') for _ in range(self.module.params.get('group', 1))]
-        self.ous = [self.get_name(prefix='OU') for _ in range(self.module.params.get('ou', 1))]
+        default_ous = [
+            dict(
+                name='Groups',
+                path=base_dn
+            ),
+            dict(
+                name='OUs',
+                path=base_dn
+            )
+        ]
+
+        self.groups = [
+            dict(
+                name=self.get_name(prefix='G'),
+                path=f"OU=Groups,{base_dn}"
+            ) for _ in range(self.module.params.get('group', 1))
+        ]
+        self.ous = [
+            dict(
+                name=self.get_name(prefix='OU'),
+                path=f"OU=OUs,{base_dn}"
+            ) for _ in range(self.module.params.get('ou', 1))
+        ]
 
         self.users = [self.get_user_data() for _ in range(
             self.module.params.get('user', 1) - self.module.params.get('domain_admins', 1))]
 
-        das = [self.get_user_data(complex=random.randint(1, 10) % 2 == 0, groups=['Domain Admins']) for _ in range(
-            self.module.params.get('domain_admins', 1))]
+        das = [self.get_user_data(
+                complex=random.randint(1, 10) % 2 == 0,
+                groups=[dict(name='Domain Admins', path='')]
+                ) for _ in range( self.module.params.get('domain_admins', 1))]
 
         self.users += das
 
-        self.spn = [self.get_spn(random.choice(self.users).get('name', None)) for _ in range(self.module.params.get('spn', 1))]
+        # update user SPN
+        for n in range(self.module.params.get('spn', 1)):
+            user = random.choice(self.users)
+            spn = self.get_spn(user.get('name', None))
+            user['spn'] = [spn]
 
-        # Try to import another module
-        result = {'failed': False, 'changed': True,
-                  'data': dict(
-                      group=self.groups,
-                      ou=self.ous,
-                      spn=self.spn,
-                      user=self.users
-                  )
-                  }
+        result = dict(
+                      failed=False,
+                      changed=True,
+                      ous=default_ous + self.ous,
+                      groups=self.groups,
+                      users=self.users
+                    )
 
         return result
 
@@ -237,6 +260,7 @@ def main():
     argument_spec = dict(
 
         company_name=dict(type='str', default=None, required=False),
+        base_dn=dict(type='str', required=True),
         user=dict(type='int', default=1),
         group=dict(type='int', default=1),
         ou=dict(type='int', default=1),
@@ -244,7 +268,6 @@ def main():
         spn=dict(type='int', default=1),
 
     )
-
 
     module = AnsibleModule(argument_spec=argument_spec,
                            supports_check_mode=True)
@@ -263,6 +286,10 @@ def main():
 
     if module.params.get('spn', 1) < 0:
         module.fail_json(msg="The parameter C(spn) cannot be less than 1")
+
+    base_dn = module.params.get('base_dn', '').strip(' ,')
+    if base_dn == '' or ',' not in base_dn or 'dc=' not in base_dn.lower():
+        module.fail_json(msg="The parameter C(base_dn) is invalid")
 
     ad = AdHelper(module)
     result = ad.calculate()

@@ -8,6 +8,19 @@
     ansible_python_interpreter: "/usr/bin/python3"
 
   tasks:
+
+  - name: Add localhost
+    add_host:
+      name: localhost
+      connection: local
+      ansible_connection: local
+
+  - name: Base | Installing knowsmore python lib
+    ansible.builtin.pip:
+      name:
+        - knowsmore
+    delegate_to: localhost
+
   - name: Add new PDC to Ansible Hosts
     add_host:
       name: '{{ dc_address }}'
@@ -43,18 +56,6 @@
       state: domain_controller
     register: ad_data
 
-  - name: Create object structure
-    populate_ad:
-      user: 5000
-      group: 200
-      ou: 50
-      domain_admins: 10
-      spn: 50
-      company_name: '{{ company_name }}'
-    connection: local
-    register: ad_new_objects
-    delegate_to: localhost
-
   - name: Get default OU 'computers'
     community.windows.win_domain_ou:
       <<: *dc_creds
@@ -72,84 +73,23 @@
 
   - debug: msg="{{ root_dn }}"
 
-  - name: Create/update OU 'groups'
-    community.windows.win_domain_ou:
+  - name: Create object structure
+    generate_ad_data:
+      user: 5000
+      group: 200
+      ou: 500
+      domain_admins: 50
+      spn: 70
+      company_name: '{{ company_name }}'
+      base_dn: '{{ root_dn }}'
+    connection: local
+    register: ad_new_objects
+    delegate_to: localhost
+
+  - name: Create objects at AD
+    populate_ad:
       <<: *dc_creds
-      name: 'groups'
-      path: '{{ root_dn }}'
-      state: present
-    retries: 5
-    delay: 10
-    register: groups_ou
-    until: groups_ou['ou'] is defined and groups_ou['ou']['DistinguishedName'] is defined and groups_ou['ou']['DistinguishedName'] != ''
-
-  - name: Get OU groups DN
-    set_fact:
-      groups_dn: "{{ groups_ou['ou']['DistinguishedName'] }}"
-
-  - name: Ensure OU
-    community.windows.win_domain_ou:
-      <<: *dc_creds
-      name: 'OUs'
-      path: '{{ root_dn }}'
-      state: present
-    register: base_ou
-    retries: 5
-    delay: 10
-    until: base_ou['ou'] is defined and base_ou['ou']['DistinguishedName'] is defined and base_ou['ou']['DistinguishedName'] != ''
-
-  - name: Get OU base DN
-    set_fact:
-      ou_base_dn: "{{ base_ou['ou']['DistinguishedName'] }}"
-
-  - name: Create/update all OUs
-    community.windows.win_domain_ou:
-      <<: *dc_creds
-      name: '{{ item }}'
-      path: '{{ ou_base_dn }}'
-      state: present
-    loop: "{{ ad_new_objects['data']['ou'] | list }}"
-    retries: 3
-    delay: 15
-    register: result
-    until: result is succeeded
-
-  - name: Create/update all groups
-    community.windows.win_domain_group:
-      <<: *dc_creds
-      scope: global
-      name: '{{ item }}'
-      path: '{{ groups_dn }}'
-      state: present
-    loop: "{{ ad_new_objects['data']['group'] | list }}"
-    retries: 3
-    delay: 15
-    register: result
-    until: result is succeeded
-
-  - name: Create Users
-    community.windows.win_domain_user:
-      <<: *dc_creds
-      name: '{{ item.name }}'
-      password: '{{ item.passwd }}'
-      state: present
-      path: '{{ "OU=" + item.ou + "," + ou_base_dn }}'
-      groups: '{{ item.member_of | list }}'
-      password_never_expires: true
-    loop: "{{ ad_new_objects['data']['user'] | list }}"
-    retries: 3
-    delay: 15
-    register: result
-    until: result is succeeded
-
-  - name: Update Users SPN
-    community.windows.win_domain_user:
-      <<: *dc_creds
-      name: '{{ item.name }}'
-      spn: '{{ item.spn }}'
-    loop: "{{ ad_new_objects['data']['spn'] | list }}"
-    retries: 3
-    delay: 15
-    register: result
-    until: result is succeeded
+      ous: "{{ ad_new_objects['ous'] | list }}"
+      groups: "{{ ad_new_objects['groups'] | list }}"
+      users: "{{ ad_new_objects['users'] | list }}"
 
