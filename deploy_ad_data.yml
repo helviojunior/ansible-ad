@@ -77,7 +77,7 @@
     generate_ad_data:
       user: 5000
       group: 200
-      ou: 500
+      ou: 30
       domain_admins: 50
       spn: 70
       company_name: '{{ company_name }}'
@@ -86,10 +86,17 @@
     register: ad_new_objects
     delegate_to: localhost
 
-  - name: Create objects at AD
+  - name: Create OUs
     populate_ad:
       <<: *dc_creds
       ous: "{{ ad_new_objects['ous'] | list }}"
-      groups: "{{ ad_new_objects['groups'] | list }}"
-      users: "{{ ad_new_objects['users'] | list }}"
 
+  - name: Create groups
+    populate_ad:
+      <<: *dc_creds
+      groups: "{{ ad_new_objects['groups'] | list }}"
+
+  - name: Create users
+    populate_ad:
+      <<: *dc_creds
+      users: "{{ ad_new_objects['users'] | list }}"

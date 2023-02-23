@@ -6,27 +6,29 @@
 
 #AnsibleRequires -CSharpUtil Ansible.Basic
 #Requires -Module ActiveDirectory
+#Requires -Module Ansible.ModuleUtils.Legacy
 
 # Based on
 #https://github.com/ansible-collections/community.windows/blob/main/plugins/modules/win_domain_ou.ps1
 #https://github.com/ansible-collections/community.windows/blob/main/plugins/modules/win_domain_group.ps1
 #https://github.com/ansible-collections/community.windows/blob/main/plugins/modules/win_domain_user.ps1
 
-
-#AnsibleRequires -CSharpUtil Ansible.Basic
 Set-StrictMode -Version 2.0
 
 $spec = @{
     options = @{
-        ous = @{ type = "list"; required = $true }
-        groups = @{ type = "list"; required = $true }
-        users = @{ type = "list"; required = $true }
+        ous = @{ type = "list"; required = $false }
+        groups = @{ type = "list"; required = $false }
+        users = @{ type = "list"; required = $false }
         domain_username = @{ type = "str"; }
         domain_password = @{ type = "str"; no_log = $true }
         domain_server = @{ type = "str" }
     }
     required_together = @(
         , @('domain_password', 'domain_username')
+    )
+    required_one_of = @(
+        , @('ous', 'groups', 'users')
     )
     supports_check_mode = $true
 }
@@ -53,15 +55,47 @@ $groups_missing_behaviour = "warn"
 
 $check_mode = $module.CheckMode
 $ous = $module.Params.ous
-$groups = $module.Params.ous
+$groups = $module.Params.groups
 $users = $module.Params.users
 $protected = $false
 $module.Diff.before = ""
 $module.Diff.after = ""
-$module.Result.ous = @()
-$module.Result.groups = @()
-$module.Result.users = @()
-$module.Result.changed = $false
+
+#https://docs.ansible.com/ansible/latest/reference_appendices/common_return_values.html#results
+$module.Result.results = @()
+
+#$module.Result.ous = @()
+#$module.Result.groups = @()
+#$module.Result.users = @()
+#$module.Result.changed = $false
+
+if (($null -eq $ous) -and ($null -eq $groups) -and ($null -eq $users)){
+  $module.FailJson("You must inform at least one of this parameters (ous, groups, users)")
+}
+
+Function Merge-Dict {
+  Param ([PSObject]$dict1, [PSObject]$dict2)
+  $merged = $dict1 | ForEach-Object -Begin {[Hashtable]$aa = @{}} -Process {foreach($element in ($_.GetEnumerator())) {if (-not ($aa.ContainsKey($element.Key))) {
+    try {
+        $aa.Add($element.Key,[string]$element.Value)
+    }
+    catch {
+        #nada
+    }
+    }}} -End {$aa}
+
+  if ($null -ne $dict2) {
+      $merged = $dict2 | ForEach-Object -Begin {[Hashtable]$aa = $merged} -Process {foreach($element in ($_.GetEnumerator())) {if (-not ($aa.ContainsKey($element.Key))) {
+        try {
+            $aa.Add($element.Key,[string]$element.Value)
+        }
+        catch {
+            #nada
+        }
+        }}} -End {$aa}
+  }
+  return [Hashtable](@{} + $merged)
+}
 
 Function Get-SimulatedOu {
     Param($Object)
@@ -118,21 +152,33 @@ Try {
 }
 Catch { $module.FailJson("Get-ADOrganizationalUnit failed: $($_.Exception.Message)", $_) }
 
-if ($ous.count -ne 0) {
+if (($null -ne $ous) -and ($ous.count -ne 0)) {
     $ous | ForEach-Object {
         $name = $_.name
         $path = $_.path
+        $result_obj = @{}
+        $result_obj.failed = $false
+        $result_obj.changed = $false
+        $result_obj.state = "present"
+        $result_obj.name = $name
+        $result_obj.type = 'ou'
+        $result_obj.ansible_loop_var = "item"
+        $result_obj.item = "OU $name"
+
 
         # determine if requested OU exist
         $current_ou = $false
         Try {
             $current_ou = $all_ous | Where-Object {
                 $_.DistinguishedName -eq "OU=$name,$path" }
-            $module.Result.ous += @( Get-OuObject -Object $current_ou )
+
+            if ($null -ne $current_ou){
+                $result_obj.changed = $true
+                $result_obj = Merge-Dict $result_obj, (Get-OuObject -Object $current_ou)
+            }
         }
         Catch {
             $current_ou = $false
-
         }
 
         # ou does not exist, create object
@@ -144,33 +190,49 @@ if ($ous.count -ne 0) {
             Try {
                 New-ADOrganizationalUnit @params @onboard_extra_args -WhatIf:$check_mode
             }
-            catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
+            Catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
                 #ignore
             }
             Catch {
-                $module.FailJson("Failed to create organizational unit: $($_.Exception.Message)", $_)
+                if ($_.Exception.Message -inotmatch "already in use") {
+                    $module.FailJson("Failed to create organizational unit: $($_.Exception.Message)", $_)
+                }
             }
-            $module.Result.created = $true
+            $result_obj.created = $true
             if (-not $check_mode) {
                 $new_ou = Get-ADOrganizationalUnit @extra_args | Where-Object {
                     $_.DistinguishedName -eq "OU=$name,$path"
                 }
                 #$module.Result.ous += @( $new_ou )
-                $module.Warn("OU created: $($name)")
+                $result_obj.msg = "OU created: $($name)"
+                $result_obj = Merge-Dict $result_obj, $new_ou
             }
         }
 
+        $module.Result.results += @( $result_obj )
 
     }
 }
 
-if ($groups.count -ne 0) {
+if (($null -ne $groups) -and ($groups.count -ne 0)) {
     $groups | ForEach-Object {
         $name = $_.name
         $path = $_.path
+        $result_obj = @{}
+        $result_obj.failed = $false
+        $result_obj.changed = $false
+        $result_obj.state = "present"
+        $result_obj.name = $name
+        $result_obj.type = 'group'
+        $result_obj.ansible_loop_var = "item"
+        $result_obj.item = "Group $name"
 
         try {
             $group = Get-ADGroup -Identity $name -Properties *
+            if ($null -ne $group){
+                $result_obj.changed = $true
+                $result_obj = Merge-Dict $result_obj, $group
+            }
         }
         catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
             $group = $null
@@ -199,28 +261,36 @@ if ($groups.count -ne 0) {
 
             try {
                 $group = New-AdGroup -WhatIf:$check_mode -PassThru @add_args
-                #$module.Result.groups += @( $group )
+                $result_obj.created = $true
+                $result_obj = Merge-Dict $result_obj, $group
             }
             catch {
                 if (-not ($($_.Exception.Message).ToLower() -Contains 'already in use')) {
                     #$module.FailJson("failed to create group $($name): $($_.Exception.Message)", $($_.Exception))
                 }
             }
-            $module.Result.created = $true
-            $module.Warn("Group created: $($name)")
+
         }
 
-
+        $module.Result.results += @( $result_obj )
 
     }
 }
 
-if ($users.count -ne 0) {
+if (($null -ne $users) -and ($users.count -ne 0)) {
     $users | ForEach-Object {
         $name = $_.name
         $path = $_.path
         $password = $_.passwd
         $memberof = $_.member_of
+        $result_obj = @{}
+        $result_obj.failed = $false
+        $result_obj.changed = $false
+        $result_obj.state = "present"
+        $result_obj.name = $name
+        $result_obj.type = 'user'
+        $result_obj.ansible_loop_var = "item"
+        $result_obj.item = "User $name"
 
         try {
             $spn = $_.spn
@@ -234,6 +304,10 @@ if ($users.count -ne 0) {
                 -Identity $name `
                 -Properties ('*', 'msDS-PrincipalName')
             $user_guid = $user_obj.ObjectGUID
+            if ($null -ne $user_obj){
+                $result_obj.changed = $true
+                $result_obj = Merge-Dict $result_obj, $user_obj
+            }
         }
         catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
             $user_obj = $null
@@ -247,6 +321,10 @@ if ($users.count -ne 0) {
         If (-not $user_obj) {
             $create_args = @{}
             $create_args.Name = $name
+            $create_args.Enabled = $true
+            $create_args.PasswordNeverExpires = $true
+            $create_args.ChangePasswordAtLogon = $false
+            $create_args.SamAccountName = $name
             If ($null -ne $path) {
                 $create_args.Path = $path
             }
@@ -262,7 +340,8 @@ if ($users.count -ne 0) {
                 $module.ExitJson()
             }
             $user_obj = Get-ADUser -Identity $user_guid -Properties ('*', 'msDS-PrincipalName')
-            $module.Warn("User created: $($name)")
+            $result_obj.created = $true
+            $result_obj = Merge-Dict $result_obj, $user_obj
         }
 
         # Configure group assignment
@@ -319,6 +398,8 @@ if ($users.count -ne 0) {
                 $module.Result.changed = $true
             }
         }
+
+        $module.Result.results += @( $result_obj )
     }
 }
 
