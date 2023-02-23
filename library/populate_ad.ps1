@@ -97,6 +97,22 @@ Function Merge-Dict {
   return [Hashtable](@{} + $merged)
 }
 
+Function Get-ObjectData {
+  Param ([PSObject]$object)
+  $filtered = @{}
+  if ($null -ne $object) {
+      $filtered = ($Object | Select-Object -Property ObjectClass,ObjectCategory,DistinguishedName,DisplayName,CanonicalName,CN | ConvertTo-Json -Depth 1 | ConvertFrom-Json).psobject.properties | ForEach-Object -Begin {[Hashtable]$aa = @{}} -Process {foreach($element in ($_)) {if (-not ($aa.ContainsKey($element.Name))) {
+        try {
+            $aa.Add($element.Name,[string]$element.Value)
+        }
+        catch {
+            #nada
+        }
+        }}} -End {$aa}
+  }
+  return [Hashtable]($filtered)
+}
+
 Function Get-SimulatedOu {
     Param($Object)
     $ou = @{
@@ -161,7 +177,6 @@ if (($null -ne $ous) -and ($ous.count -ne 0)) {
         $result_obj.changed = $false
         $result_obj.state = "present"
         $result_obj.name = $name
-        $result_obj.type = 'ou'
         $result_obj.ansible_loop_var = "item"
         $result_obj.item = "OU $name"
 
@@ -174,7 +189,7 @@ if (($null -ne $ous) -and ($ous.count -ne 0)) {
 
             if ($null -ne $current_ou){
                 $result_obj.changed = $true
-                $result_obj = Merge-Dict $result_obj, (Get-OuObject -Object $current_ou)
+                $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $current_ou)
             }
         }
         Catch {
@@ -205,7 +220,7 @@ if (($null -ne $ous) -and ($ous.count -ne 0)) {
                 }
                 #$module.Result.ous += @( $new_ou )
                 $result_obj.msg = "OU created: $($name)"
-                $result_obj = Merge-Dict $result_obj, $new_ou
+                $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $new_ou)
             }
         }
 
@@ -223,7 +238,6 @@ if (($null -ne $groups) -and ($groups.count -ne 0)) {
         $result_obj.changed = $false
         $result_obj.state = "present"
         $result_obj.name = $name
-        $result_obj.type = 'group'
         $result_obj.ansible_loop_var = "item"
         $result_obj.item = "Group $name"
 
@@ -231,7 +245,7 @@ if (($null -ne $groups) -and ($groups.count -ne 0)) {
             $group = Get-ADGroup -Identity $name -Properties *
             if ($null -ne $group){
                 $result_obj.changed = $true
-                $result_obj = Merge-Dict $result_obj, $group
+                $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $group)
             }
         }
         catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
@@ -262,7 +276,7 @@ if (($null -ne $groups) -and ($groups.count -ne 0)) {
             try {
                 $group = New-AdGroup -WhatIf:$check_mode -PassThru @add_args
                 $result_obj.created = $true
-                $result_obj = Merge-Dict $result_obj, $group
+                $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $group)
             }
             catch {
                 if (-not ($($_.Exception.Message).ToLower() -Contains 'already in use')) {
@@ -288,7 +302,6 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         $result_obj.changed = $false
         $result_obj.state = "present"
         $result_obj.name = $name
-        $result_obj.type = 'user'
         $result_obj.ansible_loop_var = "item"
         $result_obj.item = "User $name"
 
@@ -306,7 +319,7 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             $user_guid = $user_obj.ObjectGUID
             if ($null -ne $user_obj){
                 $result_obj.changed = $true
-                $result_obj = Merge-Dict $result_obj, $user_obj
+                $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $user_obj)
             }
         }
         catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
@@ -341,7 +354,7 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             }
             $user_obj = Get-ADUser -Identity $user_guid -Properties ('*', 'msDS-PrincipalName')
             $result_obj.created = $true
-            $result_obj = Merge-Dict $result_obj, $user_obj
+            $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $user_obj)
         }
 
         # Configure group assignment
