@@ -1,5 +1,4 @@
 # VM data
-vm_name: testvm
 ansible_user: Administrator
 ansible_password: "P@ssw0rd"
 
