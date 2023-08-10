@@ -127,6 +127,16 @@
        dns_domain_name='{{ domain_name }}'
        safe_mode_password='{{ recovery_password }}'
     register: ad
+    when: 'is_child is undefined or is_child != true'
+  
+  - name: Create Child Domain
+    win_domain_child: >
+       dns_domain_name='{{ domain_name }}'
+       safe_mode_password='{{ recovery_password }}'
+       domain_admin_password='{{ ansible_password }}'
+       domain_admin_username='{{ ansible_user }}'
+    register: ad
+    when: 'is_child is defined and is_child == is_child'
   
   - name: Disable firewall for Domain, Public and Private profiles
     win_firewall:

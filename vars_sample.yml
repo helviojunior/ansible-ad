@@ -18,3 +18,8 @@ recovery_password: 'P@ssw0rd'
 upstream_dns_1: 8.8.8.8
 upstream_dns_2: 8.8.4.4
 ntp_servers: "0.us.pool.ntp.org,1.us.pool.ntp.org"
+
+# If this domain controller will be member of one forest
+# just set this variable if you want to create a new domain in a existing forest
+#   upstream_dns_1 must be IP of the parent domain controller
+is_child: false
