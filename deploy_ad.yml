@@ -136,7 +136,7 @@
        domain_admin_password='{{ ansible_password }}'
        domain_admin_username='{{ ansible_user }}'
     register: ad
-    when: 'is_child is defined and is_child == is_child'
+    when: 'is_child is defined and is_child == true'
   
   - name: Disable firewall for Domain, Public and Private profiles
     win_firewall:
