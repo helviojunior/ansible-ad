@@ -12,6 +12,7 @@
     ansible_winrm_transport: ntlm
     ansible_winrm_server_cert_validation: ignore
     ansible_winrm_port: 5986
+    validate_certs: false
 
 - name: Add new PDC to Ansible Hosts
   add_host:
@@ -20,31 +21,20 @@
     ansible_winrm_transport: ntlm
     ansible_winrm_server_cert_validation: ignore
     ansible_winrm_port: 5986
+    validate_certs: false
     group: "ad"
 
-- name: Check if the server already has the new IP
+- name: Wait for system to become reachable over WinRM
   wait_for_connection:
     timeout: 15
     sleep: 3
     connect_timeout: 5
-  delegate_to: '{{ dc_address }}'
-  register: conn_test
-  ignore_errors: True
-
-- name: Wait for system to become reachable over WinRM
-  wait_for_connection:
-    timeout: 900
-  delegate_to: '{{ dc_address }}'
-  when: not conn_test.failed
-
-- name: Wait for system to become reachable over WinRM
-  wait_for_connection:
-    timeout: 900
   delegate_to: '{{ temp_address }}'
-  when: conn_test.failed
+  register: conn_test1
+  ignore_errors: True
 
 - name: Set static IP address
   win_shell: "(new-netipaddress -InterfaceAlias Ethernet0 -IPAddress {{ dc_address }} -prefixlength {{dc_netmask_cidr}} -defaultgateway {{ dc_gateway }})"
   delegate_to: '{{ temp_address }}'  
   ignore_errors: True
-  when: conn_test.failed
+  when: not conn_test.failed
