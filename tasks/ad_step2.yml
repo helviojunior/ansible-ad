@@ -91,6 +91,7 @@
     adapter_names: '*'
     ipv4_addresses:
     - '127.0.0.1'
+  when: 'is_child is undefined or is_child != true'
 
 - name: Check reverse DNS zone
   win_shell: '[System.Net.Dns]::GetHostByAddress("{{ dc_address }}").HostName'
