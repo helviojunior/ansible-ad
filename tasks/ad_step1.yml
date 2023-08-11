@@ -30,7 +30,7 @@
     sleep: 3
     connect_timeout: 5
   delegate_to: '{{ temp_address }}'
-  register: conn_test1
+  register: conn_test
   ignore_errors: True
 
 - name: Set static IP address
