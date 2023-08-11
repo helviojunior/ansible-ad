@@ -98,8 +98,8 @@
 
 - name: Create reverse DNS zone
   win_shell: "Add-DnsServerPrimaryZone -NetworkID {{reverse_dns_zone}} -ReplicationScope Forest"
-  retries: 30
-  delay: 60
+  retries: 5
+  delay: 15
   register: result           
   until: result is succeeded
   when: "dc_hostname + '.' + domain_name | string not in dns_result.stdout"
