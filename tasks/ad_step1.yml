@@ -1,0 +1,50 @@
+---
+- name: Add localhost
+  add_host:
+    name: localhost
+    connection: local
+    ansible_connection: local
+
+- name: Add temporary IP/Host Ansible Hosts
+  add_host:
+    name: '{{ temp_address }}'
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_winrm_port: 5986
+
+- name: Add new PDC to Ansible Hosts
+  add_host:
+    name: '{{ dc_address }}'
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_winrm_port: 5986
+    group: "ad"
+
+- name: Check if the server already has the new IP
+  wait_for_connection:
+    timeout: 15
+    sleep: 3
+    connect_timeout: 5
+  delegate_to: '{{ dc_address }}'
+  register: conn_test
+  ignore_errors: True
+
+- name: Wait for system to become reachable over WinRM
+  wait_for_connection:
+    timeout: 900
+  delegate_to: '{{ dc_address }}'
+  when: not conn_test.failed
+
+- name: Wait for system to become reachable over WinRM
+  wait_for_connection:
+    timeout: 900
+  delegate_to: '{{ temp_address }}'
+  when: conn_test.failed
+
+- name: Set static IP address
+  win_shell: "(new-netipaddress -InterfaceAlias Ethernet0 -IPAddress {{ dc_address }} -prefixlength {{dc_netmask_cidr}} -defaultgateway {{ dc_gateway }})"
+  delegate_to: '{{ temp_address }}'  
+  ignore_errors: True
+  when: conn_test.failed

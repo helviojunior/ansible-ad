@@ -1,0 +1,149 @@
+---
+- name: "Set Deploy vars"
+  set_fact:
+    reverse_dns_zone: "{{ ((dc_address|string) + '/' + (dc_netmask_cidr|string)) | ansible.utils.ipaddr('network/prefix') }}"
+    dc_creds: &dc_creds
+      domain_password: '{{ ansible_password }}'
+      domain_username: '{{ ansible_user }}'
+      domain_server: '{{ dc_address }}'
+
+- name: Wait for system to become reachable over new ip
+  wait_for_connection:
+    timeout: 900
+
+- name: Set Password
+  win_user:
+    name: '{{ ansible_user }}'
+    password: "{{ ansible_password }}"
+    state: present
+  ignore_errors: True  
+
+- name: Set upstream DNS server 
+  win_dns_client:
+    adapter_names: '*'
+    ipv4_addresses:
+    - '{{ upstream_dns_1 }}'
+    - '{{ upstream_dns_2 }}'
+
+- name: Stop the time service
+  win_service:
+    name: w32time
+    state: stopped
+
+- name: Set NTP Servers
+  win_shell: 'w32tm /config /syncfromflags:manual /manualpeerlist:"{{ntp_servers}}"'
+
+- name: Start the time service
+  win_service:
+    name: w32time
+    state: started  
+
+- name: Change the hostname 
+  win_hostname:
+    name: '{{ dc_hostname }}'
+  register: res
+
+- name: Reboot
+  win_reboot:
+  when: res.reboot_required   
+
+- name: Install Active Directory
+  win_feature: >
+       name=AD-Domain-Services
+       include_management_tools=yes
+       include_sub_features=yes
+       state=present
+  register: result
+
+- name: Create Domain
+  win_domain: >
+     dns_domain_name='{{ domain_name }}'
+     safe_mode_password='{{ recovery_password }}'
+  register: ad
+  when: 'is_child is undefined or is_child != true'
+
+- name: Create Child Domain
+  win_domain_child: >
+     dns_domain_name='{{ domain_name }}'
+     safe_mode_password='{{ recovery_password }}'
+     domain_admin_password='{{ ansible_password }}'
+     domain_admin_username='{{ ansible_user }}'
+  register: ad
+  when: 'is_child is defined and is_child == true'
+
+- name: Disable firewall for Domain, Public and Private profiles
+  win_firewall:
+    state: disabled
+    profiles:
+    - Domain
+    - Private
+    - Public
+  tags: disable_firewall
+
+- name: reboot server
+  win_reboot:
+   msg: "Installing AD. Rebooting..."
+   pre_reboot_delay: 15
+  when: ad.changed
+
+- name: Set internal DNS server 
+  win_dns_client:
+    adapter_names: '*'
+    ipv4_addresses:
+    - '127.0.0.1'
+
+- name: Check reverse DNS zone
+  win_shell: '[System.Net.Dns]::GetHostByAddress("{{ dc_address }}").HostName'
+  register: dns_result
+
+- name: Create reverse DNS zone
+  win_shell: "Add-DnsServerPrimaryZone -NetworkID {{reverse_dns_zone}} -ReplicationScope Forest"
+  retries: 30
+  delay: 60
+  register: result           
+  until: result is succeeded
+  when: "dc_hostname + '.' + domain_name | string not in dns_result.stdout"
+
+- name: Set the maximum password age
+  community.windows.win_security_policy:
+    section: System Access
+    key: MaximumPasswordAge
+    value: 365
+
+- name: Set the minimum password length
+  community.windows.win_security_policy:
+    section: System Access
+    key: MinimumPasswordLength
+    value: 4
+
+- name: Set the password complexity
+  community.windows.win_security_policy:
+    section: System Access
+    key: PasswordComplexity
+    value: 0
+
+#- name: Install Nuget
+#  ansible.windows.win_shell: |
+#    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+#    Install-PackageProvider -name NuGet -MinimumVersion 2.8.5.201 -Force
+
+#- name: Check for xRemoteDesktopAdmin Powershell module
+#  win_psmodule:
+#    name: xRemoteDesktopAdmin
+#    state: present
+#    accept_license: true
+
+#- name: Enable Remote Desktop
+#  win_dsc:
+#    resource_name: xRemoteDesktopAdmin
+#    Ensure: present
+#    UserAuthentication: NonSecure
+
+- name: Ensure a server is a domain controller
+  ansible.windows.win_domain_controller:
+    dns_domain_name: '{{ domain_name }}'
+    domain_admin_user: '{{ ansible_user + "@" + domain_name }}'
+    domain_admin_password: '{{ ansible_password }}'
+    safe_mode_password: '{{ ansible_password }}'
+    state: domain_controller
+  register: ad_data
