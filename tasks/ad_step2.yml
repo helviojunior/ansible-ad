@@ -1,5 +1,5 @@
 ---
-- name: "Set Deploy vars"
+- name: "Set dynamic vars"
   set_fact:
     reverse_dns_zone: "{{ ((dc_address|string) + '/' + (dc_netmask_cidr|string)) | ansible.utils.ipaddr('network/prefix') }}"
     dc_creds: &dc_creds
