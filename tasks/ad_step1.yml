@@ -14,6 +14,11 @@
     ansible_winrm_port: 5986
     validate_certs: false
 
+- name: "Set ad inventory host group"
+  set_fact:
+    host_group: 'ad'
+  when: host_group is not defined or host_group == ''
+
 - name: Add new PDC to Ansible Hosts
   add_host:
     name: '{{ dc_address }}'
@@ -22,7 +27,7 @@
     ansible_winrm_server_cert_validation: ignore
     ansible_winrm_port: 5986
     validate_certs: false
-    group: "ad"
+    group: '{{ host_group }}'
 
 - name: Wait for system to become reachable over WinRM
   wait_for_connection:
