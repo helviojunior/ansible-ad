@@ -294,9 +294,7 @@ if (($null -ne $groups) -and ($groups.count -ne 0)) {
 if (($null -ne $users) -and ($users.count -ne 0)) {
     $users | ForEach-Object {
         $name = $_.name
-        $path = $_.path
         $password = $_.passwd
-        $memberof = $_.member_of
         $result_obj = @{}
         $result_obj.failed = $false
         $result_obj.changed = $false
@@ -304,6 +302,20 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         $result_obj.name = $name
         $result_obj.ansible_loop_var = "item"
         $result_obj.item = "User $name"
+
+        try {
+            $path = $_.path
+        }
+        catch {
+            $path = $null
+        }
+
+        try {
+            $memberof = $_.member_of
+        }
+        catch {
+            $memberof = @()
+        }
 
         try {
             $spn = $_.spn
