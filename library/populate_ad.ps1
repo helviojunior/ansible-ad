@@ -240,6 +240,19 @@ if (($null -ne $groups) -and ($groups.count -ne 0)) {
         $result_obj.name = $name
         $result_obj.ansible_loop_var = "item"
         $result_obj.item = "Group $name"
+        
+        try {
+            $description = $_.description
+        }
+        catch {
+            $description = $null
+        }
+        try {
+            $displayName = $_.displayname
+        }
+        catch {
+            $displayName = $name
+        }
 
         try {
             $group = Get-ADGroup -Identity $name -Properties *
@@ -259,7 +272,12 @@ if (($null -ne $groups) -and ($groups.count -ne 0)) {
         If (-not $group) {
             $add_args = @{}
             $add_args.Name = $name
+            $add_args.DisplayName = $displayName
             $add_args.GroupScope = "global"
+            $add_args.GroupCategory = "Security"
+            if ($description -ne $null){
+                $add_args.Description = $description
+            }
 
             # validate that path is an actual path
             if ($null -ne $path) {
