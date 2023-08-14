@@ -385,6 +385,13 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         }
 
         try {
+            $displayname = $_.displayname
+        }
+        catch {
+            $displayname = $null
+        }
+
+        try {
             $user_obj = Get-ADUser `
                 -Identity $name `
                 -Properties ('*', 'msDS-PrincipalName')
@@ -408,15 +415,19 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         $create_args.PasswordNeverExpires = $true
         $create_args.ChangePasswordAtLogon = $false
         $create_args.SamAccountName = $name
-        If ($null -ne $givenName) {
-            If ($null -ne $surname) {
-                $create_args.DisplayName = "$($givenName) $($surname)"
+
+        If ($null -eq $displayname) {
+            If ($null -ne $givenName) {
+                If ($null -ne $surname) {
+                    $create_args.DisplayName = "$($givenName) $($surname)"
+                }else{
+                    $create_args.DisplayName = $givenName
+                }
             }else{
-                $create_args.DisplayName = $givenName
+                $create_args.DisplayName = $name
             }
-        }else{
-            $create_args.DisplayName = $name
         }
+        
         If ($null -ne $givenName) {
             $create_args.GivenName = $givenName
         }
