@@ -168,6 +168,9 @@ Try {
 }
 Catch { $module.FailJson("Get-ADOrganizationalUnit failed: $($_.Exception.Message)", $_) }
 
+
+$domainUsers = (Get-ADGroup -Identity "domain users" -Properties *).DistinguishedName
+
 if (($null -ne $ous) -and ($ous.count -ne 0)) {
     $ous | ForEach-Object {
         $name = $_.name
@@ -354,6 +357,13 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         }
 
         try {
+            $description = $_.description
+        }
+        catch {
+            $description = $null
+        }
+
+        try {
             $path = $_.path
         }
         catch {
@@ -379,10 +389,10 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
                 -Identity $name `
                 -Properties ('*', 'msDS-PrincipalName')
             $user_guid = $user_obj.ObjectGUID
-            if ($null -ne $user_obj){
-                $result_obj.changed = $true
-                $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $user_obj)
-            }
+            #if ($null -ne $user_obj){
+            #    $result_obj.changed = $true
+            #    $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $user_obj)
+            #}
         }
         catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
             $user_obj = $null
@@ -393,41 +403,67 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         }
 
         # If the account does not exist, create it
+        $create_args = @{}
+        $create_args.Enabled = $true
+        $create_args.PasswordNeverExpires = $true
+        $create_args.ChangePasswordAtLogon = $false
+        $create_args.SamAccountName = $name
+        If ($null -ne $givenName) {
+            If ($null -ne $surname) {
+                $create_args.DisplayName = "$($givenName) $($surname)"
+            }else{
+                $create_args.DisplayName = $givenName
+            }
+        }else{
+            $create_args.DisplayName = $name
+        }
+        If ($null -ne $givenName) {
+            $create_args.GivenName = $givenName
+        }
+        If ($null -ne $surname) {
+            $create_args.Surname = $surname
+        }
+        if ($description -ne $null){
+            $create_args.Description = $description
+        }
+
+        if ($null -ne $password) {
+            $secPassword = ConvertTo-SecureString $password -AsPlainText -Force
+        }
+
         If (-not $user_obj) {
-            $create_args = @{}
             $create_args.Name = $name
-            $create_args.Enabled = $true
-            $create_args.PasswordNeverExpires = $true
-            $create_args.ChangePasswordAtLogon = $false
-            $create_args.SamAccountName = $name
             If ($null -ne $path) {
                 $create_args.UserPrincipalName = $upn
             }
             If ($null -ne $path) {
                 $create_args.Path = $path
             }
-
-            If ($null -ne $givenName) {
-                $create_args.GivenName = $givenName
-            }
-            If ($null -ne $surname) {
-                $create_args.Surname = $surname
-            }
-
             if ($null -ne $password) {
-                $create_args.AccountPassword = ConvertTo-SecureString $password -AsPlainText -Force
+                $create_args.AccountPassword = $secPassword
             }
             $user_obj = New-ADUser @create_args -WhatIf:$check_mode -PassThru
-            $user_guid = $user_obj.ObjectGUID
             $module.Result.created = $true
-            $module.Result.changed = $true
-            If ($check_mode) {
-                $module.ExitJson()
+
+            try{
+                Add-ADGroupMember -Identity $domainUsers -Members $domainUsers -WhatIf:$check_mode -PassThru
+            }catch {
+                $module.Warn("Failed to add user to group $($domainUsers) but continuing on: $($_.Exception.Message)")
             }
-            $user_obj = Get-ADUser -Identity $user_guid -Properties ('*', 'msDS-PrincipalName')
-            $result_obj.created = $true
-            $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $user_obj)
+            
+        }else{
+            $create_args.Identity = $user_obj
+            Set-ADUser @create_args -WhatIf:$check_mode -PassThru
+            Set-ADAccountPassword -Identity $user_obj -NewPassword $secPassword
         }
+        $user_guid = $user_obj.ObjectGUID
+        $module.Result.changed = $true
+        If ($check_mode) {
+            $module.ExitJson()
+        }
+        $user_obj = Get-ADUser -Identity $user_guid -Properties ('*', 'msDS-PrincipalName')
+        $result_obj.created = $true
+        $result_obj = Merge-Dict $result_obj, (Get-ObjectData -Object $user_obj)
 
         # Configure group assignment
         if ($null -ne $memberof) {
