@@ -426,6 +426,8 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             }else{
                 $create_args.DisplayName = $name
             }
+        }else{
+            $create_args.DisplayName = $displayname
         }
         
         If ($null -ne $givenName) {
