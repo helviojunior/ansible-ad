@@ -322,13 +322,25 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
 
         try {
             $password = $_.passwd
-        }else {
+        catch {
             $password = $null
         }
 
         if ($password -eq $null)
         {
             $password = -join ((48..57) + (65..90) + (97..122) + ("!@#$%-=_".ToCharArray()) | Get-Random -Count 20 | % {[char]$_})
+        }
+
+        try {
+            $givenName = $_.givenname
+        catch {
+            $givenName = $name
+        }
+
+        try {
+            $surname = $_.surname
+        catch {
+            $surname = $null
         }
 
         try {
@@ -380,6 +392,13 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             $create_args.SamAccountName = $name
             If ($null -ne $path) {
                 $create_args.Path = $path
+            }
+
+            If ($null -ne $givenName) {
+                $create_args.GivenName = $givenName
+            }
+            If ($null -ne $surname) {
+                $create_args.Surname = $surname
             }
 
             if ($null -ne $password) {
