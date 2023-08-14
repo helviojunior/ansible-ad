@@ -322,6 +322,7 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
 
         try {
             $password = $_.passwd
+        }
         catch {
             $password = $null
         }
@@ -333,12 +334,14 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
 
         try {
             $givenName = $_.givenname
+        }
         catch {
             $givenName = $name
         }
 
         try {
             $surname = $_.surname
+        }
         catch {
             $surname = $null
         }
