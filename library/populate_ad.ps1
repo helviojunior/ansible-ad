@@ -312,7 +312,6 @@ if (($null -ne $groups) -and ($groups.count -ne 0)) {
 if (($null -ne $users) -and ($users.count -ne 0)) {
     $users | ForEach-Object {
         $name = $_.name
-        $password = $_.passwd
         $result_obj = @{}
         $result_obj.failed = $false
         $result_obj.changed = $false
@@ -320,6 +319,17 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         $result_obj.name = $name
         $result_obj.ansible_loop_var = "item"
         $result_obj.item = "User $name"
+
+        try {
+            $password = $_.passwd
+        }else {
+            $password = $null
+        }
+
+        if ($password -eq $null)
+        {
+            $password = -join ((48..57) + (65..90) + (97..122) + ("!@#$%-=_".ToCharArray()) | Get-Random -Count 20 | % {[char]$_})
+        }
 
         try {
             $path = $_.path
