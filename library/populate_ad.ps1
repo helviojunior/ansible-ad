@@ -321,13 +321,20 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         $result_obj.item = "User $name"
 
         try {
+            $upn = $_.upn
+        }
+        catch {
+            $upn = $null
+        }
+
+        try {
             $password = $_.passwd
         }
         catch {
             $password = $null
         }
 
-        if ($password -eq $null)
+        if ($null -eq $password -or '' -eq $password.Trim() )
         {
             $password = -join ((48..57) + (65..90) + (97..122) + ("!@#$%-=_".ToCharArray()) | Get-Random -Count 20 | % {[char]$_})
         }
@@ -393,6 +400,9 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             $create_args.PasswordNeverExpires = $true
             $create_args.ChangePasswordAtLogon = $false
             $create_args.SamAccountName = $name
+            If ($null -ne $path) {
+                $create_args.UserPrincipalName = $upn
+            }
             If ($null -ne $path) {
                 $create_args.Path = $path
             }
