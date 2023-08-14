@@ -459,15 +459,15 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             $module.Result.created = $true
 
             try{
-                Add-ADGroupMember -Identity $domainUsers -Members $domainUsers -WhatIf:$check_mode -PassThru
+                Add-ADGroupMember -Identity $domainUsers -Members $domainUsers -WhatIf:$check_mode -PassThru | Out-Null
             }catch {
                 $module.Warn("Failed to add user to group $($domainUsers) but continuing on: $($_.Exception.Message)")
             }
             
         }else{
             $create_args.Identity = $user_obj
-            Set-ADUser @create_args -WhatIf:$check_mode -PassThru
-            Set-ADAccountPassword -Identity $user_obj -NewPassword $secPassword
+            Set-ADUser @create_args -WhatIf:$check_mode -PassThru | Out-Null
+            Set-ADAccountPassword -Identity $user_obj -NewPassword $secPassword | Out-Null
         }
         $user_guid = $user_obj.ObjectGUID
         $module.Result.changed = $true
@@ -502,7 +502,7 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
 
             Foreach ($group in $groups) {
                 If (-not ($assigned_groups -Contains $group)) {
-                    Add-ADGroupMember -Identity $group -Members $user_guid -WhatIf:$check_mode
+                    Add-ADGroupMember -Identity $group -Members $user_guid -WhatIf:$check_mode | Out-Null
                     $user_obj = Get-ADUser -Identity $user_guid -Properties *
                     $module.Result.changed = $true
                 }
@@ -528,7 +528,7 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
                 Set-ADUser `
                     -Identity $user_guid `
                     -ServicePrincipalNames @{ Add = $(($spn | ForEach-Object { "$($_)" } )) } `
-                    -WhatIf:$check_mode
+                    -WhatIf:$check_mode | Out-Null
                 $module.Result.changed = $true
             }
         }
