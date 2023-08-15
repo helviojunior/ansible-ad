@@ -378,8 +378,9 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
         }
 
         try {
-            if ('' -ne $_.spn.Trim()){
-                $spn = $_.spn
+            $spn = $_.spn
+            if ('' -eq $spn.Trim()){
+                $spn = $null
             }
         }
         catch {
@@ -468,7 +469,12 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             
         }else{
             $create_args.Identity = $user_obj
-            Set-ADUser @create_args -WhatIf:$check_mode -PassThru | Out-Null
+            try{
+                Set-ADUser @create_args -WhatIf:$check_mode -PassThru | Out-Null
+            }
+            }catch {
+                $module.Warn("Failed to update user $($user_obj) but continuing on: $($_.Exception.Message)")
+            }
             Set-ADAccountPassword -Identity $user_obj -NewPassword $secPassword | Out-Null
         }
         $user_guid = $user_obj.ObjectGUID
