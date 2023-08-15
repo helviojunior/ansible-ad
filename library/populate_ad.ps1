@@ -471,7 +471,6 @@ if (($null -ne $users) -and ($users.count -ne 0)) {
             $create_args.Identity = $user_obj
             try{
                 Set-ADUser @create_args -WhatIf:$check_mode -PassThru | Out-Null
-            }
             }catch {
                 $module.Warn("Failed to update user $($user_obj) but continuing on: $($_.Exception.Message)")
             }
