@@ -181,7 +181,7 @@ class AdHelper():
         base_dn = self.module.params.get('base_dn', '').strip(' ,')
 
         name = self.module.params.get('company_name', None)
-        if name:
+        if name is not None and name.strip() != '' and self.module.params.get('user', 0) > 0:
 
             wlc = WordList()
             wlc.small = False
