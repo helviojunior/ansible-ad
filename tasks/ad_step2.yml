@@ -2,10 +2,6 @@
 - name: "Set dynamic vars"
   set_fact:
     reverse_dns_zone: "{{ ((dc_address|string) + '/' + (dc_netmask_cidr|string)) | ansible.utils.ipaddr('network/prefix') }}"
-    dc_creds: &dc_creds
-      domain_password: '{{ ansible_password }}'
-      domain_username: '{{ ansible_user }}'
-      domain_server: '{{ dc_address }}'
 
 - name: Wait for system to become reachable over new ip
   wait_for_connection:
@@ -17,6 +13,11 @@
     password: "{{ ansible_password }}"
     state: present
   ignore_errors: True  
+
+- name: "Check password"
+  set_fact:
+    domain_admin_password: '{{ ansible_password }}'
+  when: domain_admin_password is not defined
 
 - name: Set upstream DNS server 
   win_dns_client:
@@ -66,7 +67,7 @@
   win_domain_child: >
      dns_domain_name='{{ domain_name }}'
      safe_mode_password='{{ recovery_password }}'
-     domain_admin_password='{{ ansible_password }}'
+     domain_admin_password='{{ domain_admin_password }}'
      domain_admin_username='{{ ansible_user }}'
   register: adc
   when: 'is_child is defined and is_child == true'
