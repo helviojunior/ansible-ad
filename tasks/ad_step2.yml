@@ -56,6 +56,10 @@
        state=present
   register: result
 
+- name: Reboot
+  win_reboot:
+  when: result.reboot_required   
+
 - name: Create Domain
   win_domain: >
      dns_domain_name='{{ domain_name }}'
