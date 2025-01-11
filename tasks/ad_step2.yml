@@ -56,9 +56,10 @@
        state=present
   register: result
 
-- name: Reboot
+- name: Reboot server
   win_reboot:
-  when: result.reboot_required   
+   msg: "Installing AD. Rebooting..."
+   pre_reboot_delay: 15
 
 - name: Create Domain
   win_domain: >
