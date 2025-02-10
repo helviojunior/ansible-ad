@@ -112,6 +112,12 @@
   when: "dc_hostname + '.' + domain_name | string not in dns_result.stdout"
   ignore_errors: True  
 
+- name: Set the minimum password age (Disable Enforce password history)
+  community.windows.win_security_policy:
+    section: System Access
+    key: MiminumPasswordAge
+    value: 0
+
 - name: Set the maximum password age
   community.windows.win_security_policy:
     section: System Access
