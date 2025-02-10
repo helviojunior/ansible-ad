@@ -112,11 +112,31 @@
   when: "dc_hostname + '.' + domain_name | string not in dns_result.stdout"
   ignore_errors: True  
 
-- name: Set the minimum password age (Disable Enforce password history)
+
+- name: Set the LockoutBadCount
   community.windows.win_security_policy:
     section: System Access
-    key: MiminumPasswordAge
+    key: LockoutBadCount
+    value: 3
+
+- name: Set the ResetLockoutCount
+  community.windows.win_security_policy:
+    section: System Access
+    key: ResetLockoutCount
+    value: 5
+
+- name: Set the LockoutDuration
+  community.windows.win_security_policy:
+    section: System Access
+    key: LockoutDuration
+    value: 5
+
+- name: Ensure 'Enforce password history' is set to 0
+  community.windows.win_security_policy:
+    section: System Access
+    key: PasswordHistorySize
     value: 0
+
 
 - name: Set the maximum password age
   community.windows.win_security_policy:
